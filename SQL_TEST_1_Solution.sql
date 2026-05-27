@@ -110,7 +110,6 @@ INSERT INTO DEPENDENCY_RULES (UNIT_NBR, RULE_ID, STEP_SEQ_ID, STEP_DEP_ID) VALUE
 -- ============================================================
 -- 3.  MAIN QUERY  –  topological level assignment via rCTE
 -- ============================================================
--- Strategy (Kahn's algorithm adapted to SQL):
 --   Step A: Root steps (STEP_DEP_ID = 0) get PARALLEL_LEVEL = 1.
 --   Step B: Recursively: child.level = parent.level + 1.
 --   Step C: Final level = MAX over all incoming paths
