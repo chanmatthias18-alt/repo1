@@ -9,25 +9,54 @@
 -- Assumptions:
 --   A1. STEP_DEP_ID = 0 means "no dependency" (root node).
 --   A2. A step is ready only when ALL declared dependencies
---       have completed (AND semantics, not OR).
---   A3. The dependency graph is a DAG (no cycles). Cycles will
---       exhaust cte_max_recursion_depth and raise error 3636.
+--       have completed (AND semantics, not OR. Meaning to say steps 3 and 4 have to be completed before starting step 5).
+--   A3. The dependency graph is a Direct Acyclic Graph (no cycles).
 --   A4. Schema:
 --         PROG_NAME        (UNIT_NBR, STEP_SEQ_ID, STEP_PROG_NAME)
 --         DEPENDENCY_RULES (UNIT_NBR, RULE_ID, STEP_SEQ_ID, STEP_DEP_ID)
---   A5. DELIMITER is intentionally avoided — VS Code and most
+--   A5. DELIMITER MySQL command is intentionally avoided — VS Code and most
 --       MySQL GUI tools do not support it. The stored procedure
 --       uses a single SELECT body so no DELIMITER change is needed.
 --
 -- Known Gaps / Improvement Areas:
---   G1. Cycle detection: track a visited-path string in the rCTE
---       for a cleaner user-facing error than max-recursion.
---   G2. Cross-unit dependencies are not modelled; extend
---       DEPENDENCY_RULES with a DEP_UNIT_NBR column if needed.
---   G3. PARALLEL_LEVEL assumes uniform step duration; weighted
---       CPM analysis would improve scheduling for heterogeneous loads.
---   G4. No execution-status table is modelled; production systems
---       need a JOB_RUN table to track step completion.
+--   G1. Cycle Detection
+--       Current behaviour: if two steps accidentally depend on each
+--       other (e.g. Step A waits for Step B, and Step B waits for
+--       Step A), the query will loop forever until MySQL throws a
+--       max-recursion error — which is cryptic and hard to debug.
+--       Improvement: track the path travelled so far as a string
+--       inside the CTE (e.g. '1->2->3'). If we ever see a step ID
+--       that is already in the path string, we know a cycle exists
+--       and can throw a clear, human-readable error immediately.
+--
+--   G2. Cross-Unit Dependencies
+--       Current behaviour: each batch job (UNIT_NBR) is treated as
+--       completely independent. There is no way to say "Job 2 cannot
+--       start until Step 5 of Job 1 has finished."
+--       Improvement: add a DEP_UNIT_NBR column to DEPENDENCY_RULES
+--       so a step in one job can declare a dependency on a step in
+--       a different job, enabling cross-job orchestration.
+--
+--   G3. Uniform Step Duration Assumed
+--       Current behaviour: PARALLEL_LEVEL groups steps into waves
+--       (1, 2, 3...) but assumes every step takes the same amount
+--       of time. In reality, one step might take 2 seconds and
+--       another might take 2 hours, so grouping them together
+--       gives a misleading picture of the schedule.
+--       Improvement: assign each step an estimated duration and use
+--       Critical Path Method (CPM) to calculate the earliest and
+--       latest each step can start — giving a more accurate
+--       execution timeline.
+--
+--   G4. No Execution Status Tracking
+--       Current behaviour: the solution only plans the order of
+--       execution. It has no way to know whether a step has actually
+--       started, succeeded, or failed at runtime.
+--       Improvement: introduce a JOB_RUN table that records the
+--       status of each step in real time (e.g. PENDING, RUNNING,
+--       COMPLETED, FAILED). The scheduler would then query this
+--       table to decide which steps are ready to fire next, and
+--       operators could monitor or retry failed steps.
 -- ============================================================
 
 
@@ -39,7 +68,7 @@ SET SESSION cte_max_recursion_depth = 10000;
 
 
 -- ============================================================
--- 1.  DDL  –  reference tables (idempotent re-creation)
+-- 1.  DDL  –  reference tables
 -- ============================================================
 
 DROP TABLE IF EXISTS DEPENDENCY_RULES;
@@ -64,7 +93,7 @@ CREATE TABLE DEPENDENCY_RULES (
 
 
 -- ============================================================
--- 2.  SEED DATA  (from the assignment spreadsheet)
+-- 2.  INSERT DATA
 -- ============================================================
 
 INSERT INTO PROG_NAME (UNIT_NBR, STEP_SEQ_ID, STEP_PROG_NAME) VALUES
