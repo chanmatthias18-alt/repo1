@@ -20,6 +20,7 @@ CREATE TEMPORARY TABLE test_results (
 -- ============================================================
 -- T01  –  Linear chain: 1 → 2 → 3
 --         Expected levels: 1=1, 2=2, 3=3
+--         Step 1 runs first, then Step 2, then Step 3. Each step runs after one another like a queue. We verify each step gets assigned the correct level (1, 2, 3). If this fails, the entire resolver is broken.
 -- ============================================================
 INSERT INTO test_results
 WITH RECURSIVE
@@ -45,6 +46,8 @@ SELECT 'T01 Linear chain 1->2->3',
 -- ============================================================
 -- T02  –  Two parallel branches: 1→2, 1→3
 --         Expected: 1=1, 2=2, 3=2
+--         Step 1 runs first, then Steps 2 and 3 can both run at the same time because they both only depend on Step 1. 
+--         We verify Steps 2 and 3 get the same level (2), meaning the scheduler knows to run them in parallel.
 -- ============================================================
 INSERT INTO test_results
 WITH RECURSIVE
@@ -70,6 +73,8 @@ SELECT 'T02 Two parallel branches from root',
 -- ============================================================
 -- T03  –  Diamond: 1→2→4, 1→3→4
 --         Expected: 1=1, 2=2, 3=2, 4=3
+--         Step 1 splits into two parallel branches (Steps 2 and 3), then both must finish before Step 4 can start. 
+--         This diamond pattern is the most common real-world dependency shape. We verify Step 4 waits for both branches (2 and 3).
 -- ============================================================
 INSERT INTO test_results
 WITH RECURSIVE
@@ -97,6 +102,7 @@ SELECT 'T03 Diamond fan-out/fan-in',
 -- ============================================================
 -- T04  –  Single isolated step
 --         Expected: 1=1, exactly 1 row
+--         A job with just one step and no dependencies. We verify the resolver doesn't crash on a singular input and correctly assigns level 1, and that exactly one row comes back.
 -- ============================================================
 INSERT INTO test_results
 WITH RECURSIVE
@@ -119,6 +125,8 @@ SELECT 'T04 Single isolated step',
 -- T05  –  Multiple independent roots
 --         Root A: 1→3, Root B: 2→4
 --         Expected: 1=1, 2=1, 3=2, 4=2
+--         Two completely separate chains that share no dependencies at all. Both Chain A (1→3) and Chain B (2→4) start at level 1 independently. 
+--         We verify the resolver handles multiple entry points and doesn't mix up the two chains.
 -- ============================================================
 INSERT INTO test_results
 WITH RECURSIVE
@@ -146,6 +154,8 @@ SELECT 'T05 Multiple independent root chains',
 -- T06  –  Critical path beats shortcut edge
 --         1→2→4, 1→3→4, 1→4 (shortcut)
 --         Expected level for 4 = 3 (not 2 from shortcut)
+--         Step 4 can be reached three ways — via Step 2 (depth 3), via Step 3 (depth 3), or directly from Step 1 (depth 2, the shortcut). 
+--         The correct answer is level 3, not 2, because Step 4 must wait for Steps 2 and 3 to finish first. We verify the resolver always picks the longest path, not the shortest.
 -- ============================================================
 INSERT INTO test_results
 WITH RECURSIVE
@@ -168,6 +178,8 @@ SELECT 'T06 Critical path wins over shortcut edge',
 -- ============================================================
 -- T07  –  Multi-unit isolation
 --         Unit 1: 1→2 (2 steps), Unit 2: 1→2→3 (3 steps)
+--         Two separate batch jobs (Unit 1 and Unit 2) running in the same database. 
+--         We verify that steps from Unit 1 never bleed into Unit 2's execution plan and vice versa. Unit 1 should have exactly 2 steps, Unit 2 should have exactly 3, no mixing.
 -- ============================================================
 INSERT INTO test_results
 WITH RECURSIVE
@@ -192,8 +204,9 @@ SELECT 'T07 Multi-unit isolation',
         'PASS','FAIL');
 
 -- ============================================================
--- T08  –  Full acceptance test (assignment spreadsheet)
+-- T08  –  Full acceptance test
 --         Exact expected PARALLEL_LEVEL per step for UNIT_NBR=1
+--         From the assignment, all 13 stored procedures for UNIT_NBR=1 are loaded and we verify every single step lands on exactly the right level.
 -- ============================================================
 INSERT INTO test_results
 WITH RECURSIVE
@@ -235,6 +248,7 @@ SELECT 'T08 Full acceptance test (assignment data)',
 
 -- ============================================================
 -- T09  –  Step count integrity (exactly 13 rows for UNIT 1)
+--         We verify the resolver returns exactly 13 rows for UNIT_NBR=1, one per step. Guards against bugs/duplications where steps are accidentally duplicated or dropped from the output.
 -- ============================================================
 INSERT INTO test_results
 WITH RECURSIVE
@@ -261,6 +275,8 @@ SELECT 'T09 Step count integrity (13 unique steps)',
 
 -- ============================================================
 -- T10  –  Ordering invariant: no step at level <= its parent
+--         For every single dependency rule in the data, we check that the child step's level is always strictly greater than its parent's level. 
+--         No step is ever scheduled to run before something it depends on. If any violation is found the test fails.
 -- ============================================================
 INSERT INTO test_results
 WITH RECURSIVE
