@@ -72,7 +72,7 @@ CALL sp_batch_execution_plan(NULL);  -- all units
 
 ## How It Works
 
-The solution uses a **Recursive Common Table Expression (CTE)** implementing a critical-path variant of Kahn's topological sort algorithm:
+The solution uses a **Recursive Common Table Expression (CTE)**:
 
 | Step | What happens |
 |------|-------------|
