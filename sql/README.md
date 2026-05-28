@@ -27,7 +27,7 @@ A MySQL 8.0+ solution that resolves stored-procedure execution order for batch j
 
 1. Open `SQL_TEST_1_Solution.sql` in VS Code
 2. Connect to your MySQL database via SQLTools
-3. Press `Ctrl+Shift+P` → `SQLTools: Run Current File`
+3. Press `Ctrl+Shift+P` to run the file >> `SQLTools: Run Current File`
 
 This will:
 - Create the `PROG_NAME` and `DEPENDENCY_RULES` tables
