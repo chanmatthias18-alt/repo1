@@ -21,13 +21,43 @@ A MySQL 8.0+ solution that resolves stored-procedure execution order for batch j
 
 ---
 
+## How It Works
+
+The solution uses a **Recursive Common Table Expression (CTE)**:
+
+| Step | What happens |
+|------|-------------|
+| **Anchor** | Root steps (STEP_DEP_ID = 0) are assigned PARALLEL_LEVEL = 1 |
+| **Recursive** | Each child step gets level = parent level + 1 |
+| **Collapse** | Final level = MAX across all incoming paths (critical path rule) |
+| **Output** | Join with PROG_NAME for human-readable step names |
+
+The `MAX` collapse is the key insight; a step that depends on multiple parents must wait for the **slowest** parent to finish, so the longest path will always be taken.
+
+---
+
+## Expected Execution Plan for UNIT_NBR = 1
+
+| Level | Steps | Notes |
+|-------|-------|-------|
+| 1 | Step 1 | Job start |
+| 2 | Step 2 | Delete job set |
+| 3 | Steps 3, 4 | Static + effective PTF extract (run in parallel) |
+| 4 | Steps 5, 6, 7, 8, 9 | Tree A–E (all depend on both steps 3 and 4) |
+| 5 | Step 10 | Active portfolio (waits for all trees) |
+| 6 | Step 11 | PTF lineage |
+| 7 | Step 12 | Summary to bookable RS |
+| 8 | Step 13 | Job end |
+
+---
+
 ## How to Run
 
 ### Run the solution
 
 1. Open `SQL_TEST_1_Solution.sql` in VS Code
 2. Connect to your MySQL database via SQLTools
-3. Press `Ctrl+Shift+P` to run the file >> `SQLTools: Run Current File`
+3. Press `Ctrl+Shift+P` → `SQLTools: Run Current File`
 
 This will:
 - Create the `PROG_NAME` and `DEPENDENCY_RULES` tables
@@ -35,6 +65,13 @@ This will:
 - Run the main query showing the execution plan
 - Create the stored procedure `sp_batch_execution_plan`
 - Call the stored procedure for `UNIT_NBR = 1`
+
+### Call the stored procedure manually
+
+```sql
+CALL sp_batch_execution_plan(1);     -- single unit
+CALL sp_batch_execution_plan(NULL);  -- all units
+```
 
 ### Run the test suite
 
@@ -60,41 +97,6 @@ T10 No step runs before its dependency    PASS    ✓
 total_tests  passed  failed  pass_rate
 10           10      0       100%
 ```
-
-### Call the stored procedure manually
-
-```sql
-CALL sp_batch_execution_plan(1);     -- single unit
-CALL sp_batch_execution_plan(NULL);  -- all units
-```
-
----
-
-## How It Works
-
-The solution uses a **Recursive Common Table Expression (CTE)**:
-
-| Step | What happens |
-|------|-------------|
-| **Anchor** | Root steps (STEP_DEP_ID = 0) are assigned PARALLEL_LEVEL = 1 |
-| **Recursive** | Each child step gets level = parent level + 1 |
-| **Collapse** | Final level = MAX across all incoming paths (critical path rule) |
-| **Output** | Join with PROG_NAME for human-readable step names |
-
-The `MAX` collapse is the key insight; a step that depends on multiple parents must wait for the **slowest** parent to finish, so the longest path will always be taken.
-
-### Expected execution plan for UNIT_NBR = 1
-
-| Level | Steps | Notes |
-|-------|-------|-------|
-| 1 | Step 1 | Job start |
-| 2 | Step 2 | Delete job set |
-| 3 | Steps 3, 4 | Static + effective PTF extract (run in parallel) |
-| 4 | Steps 5, 6, 7, 8, 9 | Tree A–E (all depend on both steps 3 and 4) |
-| 5 | Step 10 | Active portfolio (waits for all trees) |
-| 6 | Step 11 | PTF lineage |
-| 7 | Step 12 | Summary to bookable RS |
-| 8 | Step 13 | Job end |
 
 ---
 
@@ -129,7 +131,7 @@ Fix: add a `DEP_UNIT_NBR` column to DEPENDENCY_RULES so a step in one job can de
 
 **G3. Uniform Step Duration Assumed**
 PARALLEL_LEVEL groups steps into waves (1, 2, 3...) but assumes every step takes the same amount of time. In reality one step might take 2 seconds and another 2 hours, making the grouping misleading.
-Fix: assign each step an estimated duration and use Critical Path Method (CPM) to calculate the earliest and latest start time for each step, for example, Step 3 takes 2 hours, Step 4 takes 30 minutes" and calculate the actual earliest start time in real time units
+Fix: assign each step an estimated duration and use Critical Path Method (CPM) to calculate the earliest and latest start time for each step, for example, Step 3 takes 2 hours, Step 4 takes 30 minutes, and calculate the actual earliest start time in real time units.
 
 **G4. No Execution Status Tracking**
 The solution only plans the order of execution. It has no way to know whether a step has actually started, succeeded, or failed at runtime.
