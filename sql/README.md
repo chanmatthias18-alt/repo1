@@ -113,7 +113,7 @@ The dependency graph is assumed to be a Directed Acyclic Graph (DAG). If a cycle
 VS Code and most MySQL GUI tools do not support the DELIMITER command. The stored procedure uses a single SELECT body with no internal semicolons, so no DELIMITER change is needed.
 
 **A5. Uniform step duration**
-PARALLEL_LEVEL assumes all steps take the same amount of time. Steps at the same level are treated as equally ready to run.
+For the purpose of assigning PARALLEL_LEVEL, all steps are treated as taking the same amount of time.
 
 ---
 
