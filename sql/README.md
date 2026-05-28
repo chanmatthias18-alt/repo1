@@ -98,23 +98,6 @@ The `MAX` collapse is the key insight — a step that depends on multiple parent
 
 ---
 
-## Test Cases
-
-| Test | What it validates |
-|------|------------------|
-| T01 | Linear chain — steps run one after another in the correct order |
-| T02 | Two parallel branches — independent steps get the same level |
-| T03 | Diamond pattern — fan-out then fan-in waits for both branches |
-| T04 | Single isolated step — resolver handles the minimum possible input |
-| T05 | Multiple independent roots — two chains don't interfere with each other |
-| T06 | Critical path beats shortcut — longest path always wins over a direct edge |
-| T07 | Multi-unit isolation — steps from different UNIT_NBRs never bleed into each other |
-| T08 | Full acceptance test — all 13 steps for UNIT_NBR=1 land on the exact expected level |
-| T09 | Step count integrity — resolver returns exactly one row per step, no duplicates |
-| T10 | Ordering invariant — no step is ever assigned a level lower than or equal to its parent |
-
----
-
 ## Assumptions
 
 **A1. STEP_DEP_ID = 0 means no dependency**
