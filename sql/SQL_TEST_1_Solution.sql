@@ -146,7 +146,8 @@ ORDER BY
 
 
 -- ============================================================
--- 4.  STORED PROCEDURE
+-- 4.  STORED PROCEDURE (optional addition for convenience
+--     , no need to run the MAIN query everytime)
 --     No DELIMITER needed — single SELECT body has no internal
 --     semicolons, so VS Code and GUI tools handle it fine.
 -- ============================================================
@@ -208,7 +209,8 @@ ORDER BY
 
 
 -- ============================================================
--- 5.  RUN
+-- 5.  RUN (optional addition for convenience
+--     , no need to run the MAIN query everytime)
 -- ============================================================
 
 CALL sp_batch_execution_plan(1);     -- single unit
