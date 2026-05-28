@@ -104,25 +104,24 @@ class Simulation:
     def _check_collisions(self, moved_car: "Car", step: int) -> None:
         """
         After moved_car has executed its command, check whether it
-        now shares a cell with any other car — including cars that
-        are already collided (frozen obstacles).
-        Only update collision_info on the other car if it has not
-        already been set.
+        now shares a cell with any other non-collided car.
+        Both cars are marked as collided and stop processing further commands.
         """
         for other in self.cars:
             if other is moved_car:
                 continue
+            if other.collided:
+                continue
             if moved_car.x == other.x and moved_car.y == other.y:
                 pos = f"({moved_car.x},{moved_car.y})"
-                moved_car.collided      = True
+                moved_car.collided       = True
                 moved_car.collision_info = (
                     f"collides with {other.name} at {pos} at step {step}"
                 )
-                if not other.collided:
-                    other.collided      = True
-                    other.collision_info = (
-                        f"collides with {moved_car.name} at {pos} at step {step}"
-                    )
+                other.collided       = True
+                other.collision_info = (
+                    f"collides with {moved_car.name} at {pos} at step {step}"
+                )
 
     def _check_starting_collisions(self) -> None:
         """
