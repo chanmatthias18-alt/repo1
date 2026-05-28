@@ -103,18 +103,23 @@ total_tests  passed  failed  pass_rate
 ## Assumptions
 
 **A1. STEP_DEP_ID = 0 means no dependency**
+
 A step with STEP_DEP_ID = 0 is a root node — it has no parent and can start immediately at level 1.
 
 **A2. AND semantics for multiple dependencies**
+
 A step is only ready when ALL of its declared dependencies have completed. For example, steps 3 and 4 must both finish before step 5 can start.
 
 **A3. No cycles in the dependency graph**
+
 The dependency graph is assumed to be a Directed Acyclic Graph (DAG). If a cycle exists, MySQL will exhaust the recursion limit and throw an error.
 
 **A4. DELIMITER is intentionally avoided**
+
 VS Code and most MySQL GUI tools do not support the DELIMITER command. The stored procedure uses a single SELECT body with no internal semicolons, so no DELIMITER change is needed.
 
 **A5. Uniform step duration**
+
 For the purpose of assigning PARALLEL_LEVEL, all steps are treated as taking the same amount of time.
 
 ---
@@ -122,17 +127,25 @@ For the purpose of assigning PARALLEL_LEVEL, all steps are treated as taking the
 ## Known Gaps & Improvement Areas
 
 **G1. Cycle Detection**
+
 If two steps accidentally depend on each other, the query will loop forever until MySQL throws a max-recursion error, which is cryptic and hard to debug.
+
 Fix: track the path travelled so far as a string inside the CTE (e.g. `1->2->3`). If a step ID already appears in the path, a cycle exists and a clear human-readable error can be raised immediately.
 
 **G2. Cross-Unit Dependencies**
+
 Each batch job (UNIT_NBR) is treated as completely independent. There is no way to say "Job 2 cannot start until Step 5 of Job 1 has finished."
+
 Fix: add a `DEP_UNIT_NBR` column to DEPENDENCY_RULES so a step in one job can declare a dependency on a step in a different job.
 
 **G3. Uniform Step Duration Assumed**
-PARALLEL_LEVEL groups steps into waves (1, 2, 3...) but assumes every step takes the same amount of time. In reality one step might take 2 seconds and another 2 hours, making the grouping misleading.
-Fix: assign each step an estimated duration and use Critical Path Method (CPM) to calculate the earliest and latest start time for each step, for example, Step 3 takes 2 hours, Step 4 takes 30 minutes, and calculate the actual earliest start time in real time units.
+
+PARALLEL_LEVEL groups steps into waves (1, 2, 3) but assumes every step takes the same amount of time. In reality one step might take 2 seconds and another 2 hours, making the grouping misleading.
+
+Fix: assign each step an estimated duration and use Critical Path Method (CPM) to calculate the earliest and latest start time for each step. For example, Step 3 takes 2 hours, Step 4 takes 30 minutes, and calculate the actual earliest start time in real time units.
 
 **G4. No Execution Status Tracking**
+
 The solution only plans the order of execution. It has no way to know whether a step has actually started, succeeded, or failed at runtime.
+
 Fix: introduce a JOB_RUN table that records the real-time status of each step (e.g. PENDING, RUNNING, COMPLETED, FAILED) so the scheduler can decide which steps are ready to fire next and operators can monitor or retry failed steps.
