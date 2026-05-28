@@ -81,7 +81,7 @@ The solution uses a **Recursive Common Table Expression (CTE)**:
 | **Collapse** | Final level = MAX across all incoming paths (critical path rule) |
 | **Output** | Join with PROG_NAME for human-readable step names |
 
-The `MAX` collapse is the key insight — a step that depends on multiple parents must wait for the **slowest** parent to finish, so we always take the longest path.
+The `MAX` collapse is the key insight; a step that depends on multiple parents must wait for the **slowest** parent to finish, so the longest path will always be taken.
 
 ### Expected execution plan for UNIT_NBR = 1
 
